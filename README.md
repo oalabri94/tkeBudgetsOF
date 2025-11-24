@@ -10,4 +10,8 @@ Lastly, the code works in parallel with OpenFoam's _fieldAveraging_ function, as
 The field turbulenceProperties:R is the modelled SGS Reynolds Stresses, and it is obtained using the _turbulenceProperties_ function. 
 If one wishes not to include the SGS contribution, delete it from the code. 
 
-Lastly, the terms EpiK, PVTK, and Tk can be averaged using the attached tkeBudgetsAverage utility.
+The terms EpiK, PVTK, and Tk can be averaged using the attached tkeBudgetsAverage utility.
+This code can be implemented directly in your case file. Simply, add both files to the system folder and in the controlDict file, add the following inside functions,
+  #include "tkeBudgets"
+  #include "tkeBudgetsAverage"
+  
