@@ -10,6 +10,7 @@ Moreover, the code MUST work in parallel with OpenFoam's _fieldAveraging_ functi
   2. UPrime2Mean
   3. pMean or p_rghMean
   4. turbulenceProperties:RMean
+\\
 The field turbulenceProperties:R is the modelled SGS Reynolds Stresses, and it is obtained using the _turbulenceProperties_ function. 
 \\
 If one wishes not to include the SGS contribution, delete it from the code. 
