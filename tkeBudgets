@@ -1,0 +1,203 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+tkeBudgets
+{
+
+    type            coded;
+    libs            (utilityFunctionObjects);  
+    name            tkeBudgets;
+    executeControl  timeStep;
+    executeInterval 5;			//evaluate every 5*time steps !!MUST BE EQUAL TO UMean/UPrime2Mean AVERAGING SETTINGS.
+    writeControl    writeTime;		//!!MUST BE EQUAL TO UMean/UPrime2Mean AVERAGING SETTINGS.
+    timeStart	100;			//!!MUST START WITH OR AFTER UMean/UPrime2Mean AVERAGING SETTINGS.
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// $This is a dynamic code that is created to evaluate the turbulent kinetic energy (TKE) budgets.           //						      
+// $The code is to be run with turbulenceFields and fieldAverage functions to calculate the following, 	     //										     
+// 	$turbulenceFields:										     //
+// 		$R --> outputs the sgs Reynolds stresses				 		     //
+//	$fieldAverage:											     //
+//		$U --> UMean & UPrime2Mean								     //
+//		$P or P_rgh --> PMean or P_rghMean							     //
+//		$turbulenceProperties:R --> turbulenceProperties:RMean					     //
+// $Also, tkeBudgetsAverage can to be used to average: Epik, PVTk, and Tk fields.			     //										     
+// !!NOTE: This code is designed to run with twoLiquidMixingFoam solver.				     // 
+//         To make it run with pisoFoam or pimpleFoam solvers, in PVTk/PVTk1, remove the division with rho.  //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    codeExecute		
+    #{
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[production of turbulent kinetic energy (Pk)]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+     auto* PkPtr = mesh().getObjectPtr<volScalarField>("Pk");
+     if (!PkPtr)
+     {
+        PkPtr = new volScalarField      
+        (
+           IOobject
+           (
+            "Pk",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+        //PkPtr.write();        
+         regIOobject::store(PkPtr);
+     }
+         auto& Pk = *PkPtr;
+         Pk = (-1.0)*(mesh().lookupObject<volSymmTensorField>("UPrime2Mean")) && Foam::fvc::grad(mesh().lookupObject<volVectorField>("UMean"));
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Covection of turbulent kinetic energy (Ck)]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+     auto* CkPtr = mesh().getObjectPtr<volScalarField>("Ck");
+     if (!CkPtr)
+     {
+        CkPtr = new volScalarField      
+        (
+           IOobject
+           (
+            "Ck",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+         regIOobject::store(CkPtr);
+     }
+         auto& Ck = *CkPtr;
+         Ck = (mesh().lookupObject<volVectorField>("UMean")) & Foam::fvc::grad (0.5*tr(mesh().lookupObject<volSymmTensorField>("UPrime2Mean")));
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Viscous dissipation of turbulent kinetic energy (Epik)]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+     auto* EpikPtr = mesh().getObjectPtr<volScalarField>("Epik");
+     if (!EpikPtr)
+     {
+        EpikPtr = new volScalarField      
+        (
+           IOobject
+           (
+            "Epik",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+         regIOobject::store(EpikPtr);
+     }
+         auto& Epik = *EpikPtr;
+         Epik = (-1.0)*(mesh().lookupObject<volScalarField>("nu")) * (Foam::fvc::grad(mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")) && Foam::fvc::grad(mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")));
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Viscous diffusion transport of turbulent kinetic energy (Dk)]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+     auto* DkPtr = mesh().getObjectPtr<volScalarField>("Dk");    
+     if (!DkPtr)
+     {
+        DkPtr = new volScalarField      
+        (
+       	  IOobject
+       	  (
+       	  	"Dk",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+       	  ),
+       	  mesh(),
+       	  dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)  	  
+        );
+
+       	regIOobject::store(DkPtr);
+     }
+       	auto& Dk = *DkPtr;
+       	
+       	Dk = (mesh().lookupObject<volScalarField>("nu")) * (Foam::fvc::laplacian(0.5*tr(mesh().lookupObject<volSymmTensorField>("UPrime2Mean"))));
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Pressure - Velocity transport of turbulent kinetic energy (PVTk) using method 1]~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     auto* PVTkPtr = mesh().getObjectPtr<volScalarField>("PVTk");    
+     if (!PVTkPtr)
+     {
+        PVTkPtr = new volScalarField     
+        ( 
+           IOobject
+           (
+            "PVTk",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+
+         regIOobject::store(PVTkPtr);
+     }
+         auto& PVTk = *PVTkPtr;
+         PVTk = (-1.0)*(mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")) & Foam::fvc::grad((mesh().lookupObject<volScalarField>("p_rgh") - mesh().lookupObject<volScalarField>("p_rghMean"))/mesh().lookupObject<volScalarField>("rho"));
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Pressure - Velocity transport of turbulent kinetic energy (PVTk1) using method 2]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+     auto* PVTk1Ptr = mesh().getObjectPtr<volScalarField>("PVTk1");    
+     if (!PVTk1Ptr)
+     {
+        PVTk1Ptr = new volScalarField     
+        ( 
+           IOobject
+           (
+            "PVTk1",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+
+         regIOobject::store(PVTk1Ptr);
+     }
+         auto& PVTk1 = *PVTk1Ptr;
+         PVTk1 = (-1.0)*(Foam::fvc::div(((mesh().lookupObject<volScalarField>("p_rgh") - mesh().lookupObject<volScalarField>("p_rghMean"))/mesh().lookupObject<volScalarField>("rho")) * (mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean"))));
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~[Turbulent transport of turbulent kinetic energy (Tk)]~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+    auto* TkPtr = mesh().getObjectPtr<volScalarField>("Tk");    
+     if (!TkPtr)
+     {
+        TkPtr = new volScalarField     
+        ( 
+           IOobject
+           (
+            "Tk",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE,
+                 IOobject::REGISTER
+           ),
+           mesh(),
+           dimensionedScalar("zero", dimensionSet(0, 2, -3, 0, 0, 0, 0), 0)     
+        );
+
+         regIOobject::store(TkPtr);
+     }
+         auto& Tk = *TkPtr;
+         Tk = (-0.5) * (Foam::fvc::div((mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")) * ((mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")) & (mesh().lookupObject<volVectorField>("U") - mesh().lookupObject<volVectorField>("UMean")))));
+
+    #};
+
+}

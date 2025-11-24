@@ -1,0 +1,45 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+tkeBudgetsAverage
+{
+        type            fieldAverage;
+        libs            (fieldFunctionObjects);
+        executeControl  timeStep;		//when to execute the commands [when the object is updated (for updating calculations or for management tasks)],
+        executeInterval 5;			//evaluate every 5*time steps
+        writeControl    writeTime;
+        //restartTime	139.3;			//One-shot reset of the averaging
+        timeStart	100;
+        //enabled       false; //true
+        fields
+        ( 
+            Epik		//Viscous dissipation of turbulent kinetic energy (Epik)
+            {
+                mean        on;  
+                prime2Mean  off; 
+                base        time;
+            }
+            PVTk		//Pressure - Velocity transport of turbulent kinetic energy (PVTk) using method 1
+            {
+                mean        on;
+                prime2Mean  off; 
+                base        time;
+            }
+            PVTk1		//Pressure - Velocity transport of turbulent kinetic energy (PVTk) using method 2
+            {
+                mean        on;
+                prime2Mean  off; 
+                base        time;
+            }            
+            Tk			//Turbulent transport of turbulent kinetic energy (Tk)
+            {
+                mean        on;
+                prime2Mean  off; 
+                base        time;
+            }
+        );
+}
